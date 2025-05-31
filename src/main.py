@@ -38,22 +38,21 @@ def find_parts_by_name_and_model(request_name: str, model_year: str, retriever: 
     found_original = None
     found_analogue = None
     query = f"{request_name} {model_year}"
-    results = retriever.rerank(retriever.search(query, top_k=3), query)
+    results = retriever.rerank(retriever.search(query, top_k=5), query)  # Увеличиваем top_k
     for metadata, _ in results:
         if "артикул" in metadata and request_name.lower() in metadata["название"].lower():
-            if any(model_year.lower() in c.lower() for c in metadata["compatibility"]):
-                item = {
-                    "id": metadata["id"],
-                    "name": metadata["название"],
-                    "compatibility": metadata["compatibility"],
-                    "original": metadata["оригинал"],
-                    "price": metadata["цена"],
-                    "article": metadata["артикул"]
-                }
-                if metadata["оригинал"]:
-                    found_original = item
-                else:
-                    found_analogue = item
+            item = {
+                "id": metadata["id"],
+                "name": metadata["название"],
+                "compatibility": metadata["compatibility"],
+                "original": metadata["оригинал"],
+                "price": metadata["цена"],
+                "article": metadata["артикул"]
+            }
+            if metadata["оригинал"]:
+                found_original = item
+            else:
+                found_analogue = item
     return found_original, found_analogue
 
 # Логика диалога
@@ -64,12 +63,16 @@ def agent_respond(history: List[Tuple[str, str]], user_msg: str, client_data: Di
         return results[0][0]["phrases"][0] if results and "phrases" in results[0][0] else "Добрый день! Чем могу помочь?"
 
     if client_data.get("state") == "wait_model_year":
+        # Улучшенный парсинг модели и года
         year_match = re.search(r"(19[9]\d|20[0-2]\d|2025)", user_msg)
         model_match = None
         words = user_msg.split()
-        for w in words:
+        for i, w in enumerate(words):
             if w[0].isupper() and not w.isdigit():
+                # Проверяем, является ли слово моделью (например, XDrive, Cruiser)
                 model_match = w
+                if i > 0 and words[i-1].lower() in ["для", "на"]:  # Контекст: "для XDrive"
+                    model_match = words[i-1] + " " + w
                 break
 
         if year_match and model_match:
@@ -119,7 +122,7 @@ def agent_respond(history: List[Tuple[str, str]], user_msg: str, client_data: Di
                     analogue_price=anal["price"]
                 )
             else:
-                client_data["state"] = "handover"
+                client_data["state"] = "done"  # Завершаем диалог после передачи
                 lead_data = {
                     "requested_part": client_data["requested_part"],
                     "model_year": model_year,
@@ -164,7 +167,7 @@ def agent_respond(history: List[Tuple[str, str]], user_msg: str, client_data: Di
             return "Пожалуйста, укажите ваше имя и телефон для оформления счёта."
 
         if any(w in msg for w in ["vin", "менеджера", "доставка", "гарантия"]):
-            client_data["state"] = "handover"
+            client_data["state"] = "done"  # Завершаем диалог
             lead_data = {
                 "requested_part": client_data.get("requested_part", ""),
                 "model_year": client_data.get("model_year", ""),
@@ -254,7 +257,6 @@ def simulate_dialogs():
     ]
 
     retriever = Retriever()
-    # Объединяем catalog_chunks и sales_templates
     all_chunks = catalog_chunks + sales_templates
     retriever.build_index(all_chunks)
 

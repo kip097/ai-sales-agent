@@ -38,10 +38,10 @@ def find_parts_by_name_and_model(request_name: str, model_year: str, retriever: 
     found_original = None
     found_analogue = None
     query = f"{request_name} {model_year}"
-    results = retriever.rerank(retriever.search(query, top_k=10), query)  # Увеличиваем top_k
+    results = retriever.rerank(retriever.search(query, top_k=10), query)
     for metadata, _ in results:
         if "артикул" in metadata:
-            # Упрощённая проверка: название содержит часть запроса
+            # Проверяем, содержит ли название хотя бы часть запроса
             name_match = any(part.lower() in metadata["название"].lower() for part in request_name.split())
             if name_match:
                 item = {
@@ -66,7 +66,6 @@ def agent_respond(history: List[Tuple[str, str]], user_msg: str, client_data: Di
         return results[0][0]["phrases"][0] if results and "phrases" in results[0][0] else "Добрый день! Чем могу помочь?"
 
     if client_data.get("state") == "wait_model_year":
-        # Улучшенный парсинг модели и года
         year_match = re.search(r"(19[9]\d|20[0-2]\d|2025)", user_msg)
         model_match = None
         known_models = ["XDrive", "Cruiser", "Vento"]
@@ -93,7 +92,7 @@ def agent_respond(history: List[Tuple[str, str]], user_msg: str, client_data: Di
                     orig_price=orig["price"],
                     analogue_article=anal["article"],
                     analogue_price=anal["price"]
-                ) if results else sales_phrases["offer_parts_12345678"].format(
+                ) if results else "Для {model_year} у нас есть: оригинал ({orig_article}) за {orig_price} ₽ и аналог ({analogue_article}) за {analogue_price} ₽. Хотите оформить заказ?".format(
                     model_year=model_year,
                     orig_article=orig["article"],
                     orig_price=orig["price"],
@@ -106,7 +105,7 @@ def agent_respond(history: List[Tuple[str, str]], user_msg: str, client_data: Di
                     model_year=model_year,
                     orig_article=orig["article"],
                     orig_price=orig["price"]
-                ) if results else sales_phrases["offer_only_original_12345678"].format(
+                ) if results else "Для {model_year} есть оригинал ({orig_article}) за {orig_price} ₽. Хотите оформить заказ?".format(
                     model_year=model_year,
                     orig_article=orig["article"],
                     orig_price=orig["price"]
@@ -117,7 +116,7 @@ def agent_respond(history: List[Tuple[str, str]], user_msg: str, client_data: Di
                     model_year=model_year,
                     analogue_article=anal["article"],
                     analogue_price=anal["price"]
-                ) if results else sales_phrases["offer_only_analogue_12345678"].format(
+                ) if results else "Для {model_year} есть аналог ({analogue_article}) за {analogue_price} ₽. Хотите оформить заказ?".format(
                     model_year=model_year,
                     analogue_article=anal["article"],
                     analogue_price=anal["price"]
@@ -155,7 +154,7 @@ def agent_respond(history: List[Tuple[str, str]], user_msg: str, client_data: Di
         if any(w in msg for w in ["дорого", "цена"]):
             client_data["state"] = "handle_objection"
             results = retriever.search("objection_price", top_k=1)
-            return results[0][0]["phrases"][0] if results else sales_phrases["objection_price_12345678"]
+            return results[0][0]["phrases"][0] if results else "Цена обусловлена качеством, оригинал служит дольше. Рассмотрите аналог, он дешевле."
 
         if any(w in msg for w in ["аналог нормальный", "качество аналога"]):
             client_data["state"] = "handle_objection"

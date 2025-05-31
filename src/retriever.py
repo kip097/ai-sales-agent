@@ -33,7 +33,7 @@ class Retriever:
     def search(self, query: str, top_k: int = 3, max_distance: float = 1.0) -> List[Tuple[Dict, float]]:
         """
         Поиск релевантных чанков по запросу.
-        Возвращает список (metadata чанка, расстояние).
+        Возвращает список (chunk, расстояние).
         """
         if self.index is None:
             raise RuntimeError("Индекс не построен")
@@ -44,14 +44,14 @@ class Retriever:
         for dist, idx in zip(distances[0], indices[0]):
             if idx == -1 or dist > max_distance:
                 continue
-            results.append((self.chunks[idx]["metadata"], dist))
+            results.append((self.chunks[idx], dist))
         return results
 
     def rerank(self, results: List[Tuple[Dict, float]], query: str, top_k: int = 3) -> List[Tuple[Dict, float]]:
         """
         Переранжирование результатов с помощью кросс-энкодера.
-        results: список (metadata, расстояние) из search.
-        Возвращает отсортированный список (metadata, score).
+        results: список (chunk, расстояние) из search.
+        Возвращает отсортированный список (chunk, score).
         """
         if not results:
             return []
@@ -59,7 +59,7 @@ class Retriever:
         pairs = [(query, chunk["page_content"]) for chunk, _ in results]
         scores = self.cross_encoder.predict(pairs)
         ranked = [(results[i][0], scores[i]) for i in range(len(results))]
-        ranked.sort(key=lambda x: x[1], reverse=True)  # Высокий score — более релевантно
+        ranked.sort(key=lambda x: x[1], reverse=True)
         return ranked[:top_k]
 
 if __name__ == "__main__":
@@ -77,7 +77,8 @@ if __name__ == "__main__":
     ranked_results = retriever.rerank(results, query, top_k=3)
 
     print("Результаты поиска:")
-    for metadata, score in ranked_results:
+    for chunk, score in ranked_results:
+        metadata = chunk["metadata"]
         if "артикул" in metadata:
             print(f"- Запчасть: {metadata['название']} ({metadata['артикул']}), "
                   f"цена: {metadata['цена']} ₽, score={score:.4f}")
